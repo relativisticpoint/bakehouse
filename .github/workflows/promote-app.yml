@@ -1,0 +1,25 @@
+name: promote-app
+
+on:
+  workflow_dispatch:
+    inputs:
+      digest:
+        description: "Image digest in app-candidates to promote (sha256:...)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(TP2.3): assume vars.ROLE_ARTIFACTS, cosign verify the digest (pin the certificate identity to
+      #   THIS repository's app workflow on main), copy by digest candidates -> releases with crane,
+      #   then assert the destination digest equals the input. No rebuild, ever.
+      - run: echo "TODO(TP2.3) verify and promote ${{ inputs.digest }}"

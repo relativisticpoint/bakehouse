@@ -1,0 +1,67 @@
+name: terraform
+
+on:
+  pull_request:
+    paths: ["modules/**", "envs/**", "artifacts/**", ".github/workflows/terraform.yml"]
+  push:
+    branches: [main]
+    paths: ["modules/**", "envs/**", "artifacts/**", ".github/workflows/terraform.yml"]
+  workflow_dispatch:   # re-apply on demand; needed in TP4/TP5 (dev follows a data-source lookup, not a file change)
+
+# Least privilege by default. Jobs that need more ask for it explicitly.
+permissions:
+  contents: read
+
+# Never run two applies at once, and never cancel an apply halfway.
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(TP1.3): setup-terraform, `terraform fmt -check -recursive`, tflint, `trivy config .`,
+      #              and `terraform validate` per stack (init -backend=false).
+      - run: echo "TODO(TP1.3) static checks"
+
+  plan:
+    if: github.event_name == 'pull_request'
+    needs: checks
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write       # OIDC token request
+      contents: read
+      pull-requests: write  # to post the plan as a comment
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(TP1.3): matrix over envs/dev and envs/prod. configure-aws-credentials with
+      #              vars.ROLE_TF_PLAN, init with -backend-config bucket, `plan -out`, post as PR comment.
+      - run: echo "TODO(TP1.3) plan"
+
+  apply-dev:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(TP1.3): assume vars.ROLE_TF_APPLY, plan -out=tfplan, apply tfplan (the SAME file).
+      - run: echo "TODO(TP1.3) apply dev"
+
+  apply-prod:
+    if: github.event_name != 'pull_request'
+    needs: apply-dev
+    runs-on: ubuntu-24.04-arm
+    environment: prod       # protected environment: requires your approval
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(TP1.3): same as dev. Bonus: produce the plan in an earlier job, upload it as an artifact,
+      #              and apply exactly that file here after approval.
+      - run: echo "TODO(TP1.3) apply prod"

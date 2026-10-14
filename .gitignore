@@ -1,0 +1,31 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+# keep .terraform.lock.hcl committed
+
+# Packer
+packer_cache/
+*.pkr.hcl.bak
+
+# Secrets / local env
+.env
+*.pem
+*.key
+credentials
+.aws/
+
+# Go / build
+app/bin/
+*.test
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/

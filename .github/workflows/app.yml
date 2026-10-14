@@ -1,0 +1,26 @@
+name: app
+
+on:
+  pull_request:
+    paths: ["app/**", ".github/workflows/app.yml"]
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/app.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write   # needed for AWS OIDC and for keyless cosign signing
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(TP2.2): docker buildx build (arm64) with VERSION/GIT_SHA build args.
+      #   PRs: build + scan only, NO push and NO AWS credentials.
+      #   main: also assume vars.ROLE_ARTIFACTS, push to ECR_CANDIDATES tagged with the git SHA,
+      #         syft SBOM + attach it, trivy gate (HIGH,CRITICAL, --ignore-unfixed, exit-code 1),
+      #         cosign sign by DIGEST (keyless). Order matters: what should happen before the push?
+      - run: echo "TODO(TP2.2) build, scan, sign"

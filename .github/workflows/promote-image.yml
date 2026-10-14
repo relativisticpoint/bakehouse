@@ -1,0 +1,24 @@
+name: promote-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      ami_id:
+        description: "AMI id (Channel=candidate) to promote to approved"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(TP3.4): assume vars.ROLE_IMAGE_FACTORY, check the AMI exists and is tagged Channel=candidate
+      #   with Project=bakehouse, set Channel=approved, enable deprecation on approved AMIs older than the latest 2.
+      - run: echo "TODO(TP3.4) promote ${{ inputs.ami_id }}"

@@ -1,0 +1,17 @@
+[Unit]
+Description=Bakehouse app container
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/bakehouse/app.env
+ExecStartPre=-/usr/bin/docker rm -f bakehouse-app
+ExecStartPre=/usr/bin/docker pull ${APP_IMAGE}
+ExecStart=/usr/bin/docker run --rm --name bakehouse-app -p 80:8080 -e APP_ENV=${APP_ENV} ${APP_IMAGE}
+ExecStop=/usr/bin/docker stop bakehouse-app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
