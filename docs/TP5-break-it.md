@@ -1,4 +1,4 @@
-# TP5: Break it, and tear it down (17:00–18:00)
+# TP5: Break it, and tear it down (18:00–19:00)
 
 ## Objectives
 A pipeline is production grade when its **failure paths** work. In this TP you break the platform four ways on purpose and watch each safeguard (or its absence) do its job. Then you shut everything down, and the money stops.
@@ -31,10 +31,10 @@ The base `app.service` runs the container with `-p 80:8080`. `verify.sh` never c
 3. Trigger the Terraform workflow manually (`workflow_dispatch`): dev follows `approved`, so the plan now wants to replace the instances. Watch what happens in the console:
    - Does the old instance keep serving traffic while the new one boots?
    - What do the target group's health checks say about the new instance?
-   - What does the instance refresh status do over the next minutes? Does automatic rollback fire? Look at `aws autoscaling describe-instance-refreshes`.
+   - What does the instance refresh status do over the next minutes? Look at `aws autoscaling describe-instance-refreshes`. What to expect: the old instance keeps serving; the new one is repeatedly terminated and replaced; the refresh stays `InProgress` at 0% for up to about an hour before failing. Automatic rollback will **not** save you within the time of this drill.
 4. Meanwhile `curl` the dev ALB in a loop (`while sleep 2; do curl -s -o /dev/null -w '%{http_code}\n' http://<dev-alb>/; done`). **Was there downtime?**
 5. What did the pipeline's smoke test do? If it hung or passed wrongly, fix TP4.3 (timeouts, assertions on the *expected* AMI id).
-6. **Recover** the way you would in production: revert the `app.service` change in a PR, let a new candidate be baked and approved, re-run the deploy. Also deprecate the bad AMI (`Channel` → `rejected`, deprecate it) so nothing can pick it up again.
+6. **Recover** the way you would in production: revert the `app.service` change in a PR, let a new candidate be baked and approved. Before re-running the deploy, cancel the stuck refresh, because AWS rejects launch-template changes while one is active: `aws autoscaling cancel-instance-refresh --auto-scaling-group-name bakehouse-dev-asg` (adapt the name). Then re-run the deploy. Also deprecate the bad AMI (`Channel` → `rejected`, deprecate it) so nothing can pick it up again.
 
 > Be careful and write down what you observe rather than what the doc says. Instance-refresh rollback and failure behaviour has several conditions; the point is to learn how *your* configuration behaves.
 
@@ -42,8 +42,10 @@ The base `app.service` runs the container with `-p 80:8080`. `verify.sh` never c
 
 Then write a short **postmortem** (template below).
 
-## Drill 3: Drift (≈10 min)
+## Drill 3: Drift (optional, ≈10 min; first to cut if you're late)
 *Safeguard under test: nothing, today. That's the lesson.*
+
+This only shows drift if your security-group rules are written **inline** (`ingress {}` blocks, as TP4.1 asked). Rules defined as standalone `aws_vpc_security_group_*_rule` resources aren't tracked by the group, so a rule added by hand in the console would be invisible. That's a real Terraform trap in its own right.
 
 1. In the AWS console, edit dev's instance security group: add an inbound rule you invent (say, TCP 8080 from `0.0.0.0/0`).
 2. From your laptop, plan `envs/dev` (`terraform init -backend-config="bucket=…"`, then `terraform plan`). Terraform shows the drift and proposes to remove the rule.
@@ -51,7 +53,7 @@ Then write a short **postmortem** (template below).
 4. Let the pipeline restore the rule set: trigger a dev apply via `workflow_dispatch`.
 
 ## Drill 4: Teardown (≈15 min)
-Order matters: things that depend on others go first. Use your admin profile from your laptop (the pipeline roles are deliberately unable to delete everything).
+Order matters: things that depend on others go first. Use your admin profile from your laptop (the pipeline roles are deliberately unable to delete everything). Destroy the **environments first**, while at least one `approved` AMI still exists: dev re-reads its AMI data source on destroy and fails on the lookup if every approved AMI has already been deprecated or deregistered (pin `ami_id` if you must destroy later).
 
 ```bash
 export AWS_PROFILE=bakehouse
@@ -63,7 +65,7 @@ for env in prod dev; do
 done
 
 # 2. Artifact repositories (delete images first, or make the repos force-deletable;
-#    batch-delete-image errors on an empty repo, which is fine, skip it)
+#    batch-delete-image errors on an empty repo (fine, skip it) and takes at most 100 ids per call)
 aws ecr batch-delete-image --repository-name bakehouse/app-candidates \
   --image-ids "$(aws ecr list-images --repository-name bakehouse/app-candidates --query 'imageIds' --output json)"
 aws ecr batch-delete-image --repository-name bakehouse/app-releases \

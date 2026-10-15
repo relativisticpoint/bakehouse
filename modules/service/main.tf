@@ -1,7 +1,10 @@
 # Service module: ALB + Auto Scaling Group of golden-AMI instances running the app container.
 #
 # TODO(TP4.1): create
-#   Security groups
+#   Security groups: write the rules INLINE (ingress {} / egress {}), TP5 drill 3 (drift) depends on it:
+#     rules defined as separate aws_vpc_security_group_*_rule resources are invisible to drift detection
+#     of the group. Two groups referencing each other inline create a dependency cycle: make the ALB's
+#     egress rule a standalone aws_vpc_security_group_egress_rule to break it.
 #     - alb:      80 from 0.0.0.0/0, egress to the instance SG only
 #     - instance: 80 from the ALB SG ONLY. No port 22. Egress 443 (ECR, SSM) + whatever you need.
 #   Load balancer
@@ -17,7 +20,7 @@
 #         (http_tokens = "required", and think about http_put_response_hop_limit: the app
 #          runs in a container and reads instance metadata, one extra network hop),
 #         encrypted EBS, instance profile, SG, user_data (see below)
-#     - aws_autoscaling_group
+#     - aws_autoscaling_group   (max_size = 2 * desired: the refresh surges to double capacity)
 #         health_check_type = "ELB", target_group_arns, desired = var.desired_capacity,
 #         launch_template version = latest_version (so a new AMI triggers a refresh),
 #         instance_refresh { strategy = "Rolling", preferences { ... } }

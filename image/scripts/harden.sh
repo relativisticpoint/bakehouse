@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # TODO(TP3.2): pragmatic "CIS-lite" hardening.
-#   - security patches first: dnf -y upgrade --security   (patching an image = rebuilding it)
+#   - security patches first (patching an image = rebuilding it). AL2023 repos are versioned and dnf stays on
+#     the release the AMI shipped with, so a plain `dnf upgrade --security` can be a no-op:
+#     use `dnf -y upgrade --security --releasever=latest`
 #   - sysctl drop-in in /etc/sysctl.d/: rp_filter, no ICMP redirects, no source routing, tcp_syncookies
 #     (careful: don't turn off IP forwarding, Docker needs it)
 #   - auditd installed and enabled, chrony enabled

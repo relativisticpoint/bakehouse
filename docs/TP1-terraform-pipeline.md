@@ -1,4 +1,4 @@
-# TP1: Terraform pipeline (09:30–11:00)
+# TP1: Terraform pipeline (09:30–11:15)
 
 ## Objectives
 - Write a reusable **module** and compose it into two environments.
@@ -15,8 +15,8 @@ Work in `modules/network/`, `envs/dev/`, `envs/prod/`, `.github/workflows/terraf
 
 **Pinning, at three levels.**
 - `required_version` (Terraform) and `required_providers` with `~>` constraints;
-- `.terraform.lock.hcl`: **commit it**. It records provider hashes. Generate hashes for every platform that will run it: your Mac *and* the Linux CI runner:
-  `terraform providers lock -platform=darwin_arm64 -platform=linux_arm64`
+- `.terraform.lock.hcl`: **commit it**. It records provider hashes. Generate hashes for every platform that will run it: your Mac *and* the Linux CI runner (plus `linux_amd64` in case a runner label changes):
+  `terraform providers lock -platform=darwin_arm64 -platform=linux_arm64 -platform=linux_amd64`
 - CI runs `terraform init -lockfile=readonly` so it can never silently upgrade a provider.
 
 **Plan on PR, apply on merge.** The reviewer approves a *plan*, not just code. Two rules make this safe:
@@ -56,7 +56,7 @@ terraform init -backend-config="bucket=bakehouse-tfstate-$(aws sts get-caller-id
 terraform plan
 ```
 
-Then generate the multi-platform lock files in **both** env directories and in `bootstrap/`, and commit them:
+Then generate the multi-platform lock files in **every stack directory** (both `envs/`, `bootstrap/`, and later `artifacts/`; CI's `init -lockfile=readonly` fails without one) and commit them:
 
 ```bash
 terraform providers lock -platform=darwin_arm64 -platform=linux_arm64 -platform=linux_amd64
@@ -64,12 +64,15 @@ terraform providers lock -platform=darwin_arm64 -platform=linux_arm64 -platform=
 
 Do **not** run `apply` from your laptop. The pipeline does that.
 
+> The skeleton ships a placeholder `app_image_digest` (all zeros) so that `plan` works before you have an image, and a `.tflint.hcl` that silences "unused variable" warnings until TP4 (when the service module starts using them). Both carry `TODO(TP4…)` comments.
+
 ### TP1.3: The workflow
 Complete `.github/workflows/terraform.yml`. Required behaviour:
 
 | Event | Job | What it does |
 |---|---|---|
 | PR | `checks` | `terraform fmt -check -recursive`, `tflint`, `trivy config`, and `terraform validate` (with `init -backend=false`) for each stack |
+| PR | `gate` | Fails if `checks` or `plan` failed. The **only** check branch protection requires (see TP1.4) |
 | PR | `plan` (matrix: dev, prod) | OIDC → `ROLE_TF_PLAN`, `init -lockfile=readonly -backend-config=...`, `plan -out`, **post the plan as a PR comment** |
 | push to main | `apply-dev` | OIDC → `ROLE_TF_APPLY` (environment `dev`), plan then apply the same plan file |
 | push to main | `apply-prod` | same, but environment `prod` (approval required) and only after dev succeeded |
@@ -84,11 +87,11 @@ Complete `.github/workflows/terraform.yml`. Required behaviour:
 </details>
 <details><summary>Hint: plan comment</summary>
 
-`terraform show -no-color tfplan > plan.txt`, then `gh pr comment "$PR_NUMBER" --body-file plan.txt` with `GH_TOKEN: ${{ github.token }}` and `pull-requests: write`. GitHub comments are limited to 65,536 characters; truncate. Use a marker so you can update the comment instead of spamming one per push.
+`hashicorp/setup-terraform@v3` installs a wrapper that mangles `terraform show > file` and `-detailed-exitcode`: set `terraform_wrapper: false`. Then `terraform show -no-color tfplan > plan.txt`. `gh pr comment` creates a **new** comment per push; to update in place, put a hidden marker (`<!-- plan:envs/dev -->`) in the body, list the PR's comments through the REST API, and `PATCH /repos/{owner}/{repo}/issues/comments/{id}` if the marker exists. Needs `GH_TOKEN: ${{ github.token }}` and `pull-requests: write`. Comments are limited to 65,536 characters: truncate.
 </details>
 <details><summary>Hint: trivy and tflint</summary>
 
-`aquasecurity/setup-trivy` (or `trivy` from an action) then `trivy config --exit-code 1 --severity HIGH,CRITICAL .`. For tflint: `terraform-linters/setup-tflint`, then `tflint --recursive`. Run both locally first.
+`aquasecurity/setup-trivy` (pin its version) then `trivy config --exit-code 1 --severity HIGH,CRITICAL .`. For tflint: `terraform-linters/setup-tflint`, then `tflint --recursive --config "$GITHUB_WORKSPACE/.tflint.hcl"`. The **absolute** `--config` matters: in recursive mode a relative or implicit config is not found in sub-directories, and you'd get warnings the config was meant to silence. tflint exits non-zero on *warnings*, not only errors. Run both locally first.
 </details>
 
 Run `actionlint` before you push: `actionlint`.
@@ -98,16 +101,32 @@ Run `actionlint` before you push: `actionlint`.
 ### TP1.4: Environments and branch protection
 Create the GitHub environments and protect `main`. Open at least one PR *first* (protection can only require checks that have run once).
 
+Order matters: **protect `main` first**, because an environment restricted to protected branches refuses even `main` until it is protected.
+
 ```bash
 OWNER=$(gh api user -q .login); UID_=$(gh api user -q .id)
-gh api -X PUT repos/$OWNER/bakehouse/environments/dev
-gh api -X PUT repos/$OWNER/bakehouse/environments/prod \
-  --input - <<JSON
-{ "reviewers": [ { "type": "User", "id": $UID_ } ], "deployment_branch_policy": { "protected_branches": true, "custom_branch_policies": false } }
+
+# 1. Branch protection: require the `gate` job (only), block force-push, no required reviews (you are alone)
+gh api -X PUT repos/$OWNER/bakehouse/branches/main/protection --input - <<JSON
+{ "required_status_checks": { "strict": false, "checks": [ { "context": "gate" } ] },
+  "enforce_admins": false, "required_pull_request_reviews": null, "restrictions": null,
+  "allow_force_pushes": false }
+JSON
+
+# 2. Environments. BOTH are limited to protected branches: otherwise a workflow on any feature branch
+#    could say `environment: dev` and assume the apply role.
+gh api -X PUT repos/$OWNER/bakehouse/environments/dev --input - <<JSON
+{ "deployment_branch_policy": { "protected_branches": true, "custom_branch_policies": false } }
+JSON
+gh api -X PUT repos/$OWNER/bakehouse/environments/prod --input - <<JSON
+{ "reviewers": [ { "type": "User", "id": $UID_ } ],
+  "deployment_branch_policy": { "protected_branches": true, "custom_branch_policies": false } }
 JSON
 ```
 
-Branch protection on `main`: require a PR, require the `checks` and `plan` status checks, block force-push. (Don't require approving *reviews* — you're the only collaborator. Discuss why that is a limitation, not a best practice.)
+Open a PR **first**: protection can only require checks that have run at least once. Two traps worth knowing: a matrix job's check is named `plan (envs/dev)`, not `plan`, and a workflow with a `paths:` filter never starts for a PR that doesn't match, leaving a required check forever "waiting". That is why the skeleton has no `paths:` filter on `pull_request` and why you require the single `gate` job. A *skipped* job counts as passing, so `gate` must also fail when a needed job is cancelled or failed.
+
+Add an `if: github.ref == 'refs/heads/main'` to every apply job as a second lock. (Discuss why "no required reviews" is a limitation of working alone, not a best practice.)
 
 ## Break it
 1. **Insecure by commit.** In a PR, add to `envs/dev/main.tf` a security group with ingress on port 22 from `0.0.0.0/0`. Watch `trivy config` fail the PR. Remove it.
@@ -125,7 +144,7 @@ Branch protection on `main`: require a PR, require the `checks` and `plan` statu
 ## Review questions
 1. Why `plan -out` + `apply tfplan` rather than a plain `apply` in the apply job?
 2. What can go wrong if the lock file only contains `darwin_arm64` hashes?
-3. Someone opens a PR from a fork. What happens to the `plan` job, and is that what you want?
+3. Someone opens a PR from a fork. What happens to the `plan` job, and is that what you want? (Careful: a *skipped* job counts as passing for a required check. What stops the PR from merging anyway?)
 4. Why is the `prod` plan generated at PR time potentially different from what applies after merge, and how would you reduce that gap?
 5. What would you lose by using workspaces instead of directories? What would you gain?
 

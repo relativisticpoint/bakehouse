@@ -1,4 +1,4 @@
-# TP3: The OS factory (13:30–15:30)
+# TP3: The OS factory (13:45–16:00)
 
 > **Tip:** do TP3.1 before lunch so the first bake runs while you eat. Bakes take ~8–12 minutes, and waiting on them is where this TP's time goes.
 
@@ -15,7 +15,7 @@ Work in `image/`, `.github/workflows/image.yml`, `.github/workflows/promote-imag
 
 **Bake vs fry.** What goes *in* the image ("baked": OS patches, Docker, agents, hardening, the systemd unit) versus what is applied at boot ("fried": environment name, which app version). Rule of thumb: bake everything slow, large or security-relevant, fry only the small, environment-specific bits. Our split: the AMI contains Docker and `app.service`; user-data (TP4) only writes `/etc/bakehouse/app.env` with the image digest and environment.
 
-**Provenance of the base.** Your image is only as trustworthy as its parent. We start from Amazon's official AL2023 image, found through a *public SSM parameter* (`/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64`), which always points at the current AMI. Record the parent AMI id in the tags so every image is traceable.
+**Provenance of the base.** Your image is only as trustworthy as its parent. We start from Amazon's official AL2023 image, found through a *public SSM parameter* (`/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64`), which always points at the current AMI. Record the parent AMI id in the tags so every image is traceable. (Note: from 2026-08-17 `kernel-default` points at kernel 6.18 instead of 6.1: the base your image builds on changes underneath you. A `kernel-6.x`-style parameter pins it. Either way, the `BaseAmi` tag tells you which one you got.)
 
 **Hardening, pragmatically.** CIS benchmarks have hundreds of rules; we do a "CIS-lite" subset with the best value: patched OS, sane kernel parameters, auditing, time sync, **no SSH** (access is via SSM Session Manager; fewer doors, and every session is logged), nothing unnecessary installed.
 
@@ -32,7 +32,8 @@ Follow the TODO comment at the top of the file. Required properties:
 - instance type `t4g.small`, builds in the **default VPC**, SSH limited to the builder's own public IP via a temporary security group;
 - IMDSv2 only (`imds_support = "v2.0"`), encrypted boot volume;
 - AMI name `bakehouse-<git_sha>-<timestamp>`;
-- tags **on both the AMI and its snapshots**: `Project=bakehouse`, `Channel=candidate`, `GitSha`, `BaseAmi`, `BuildDate`.
+- tags **on both the AMI and its snapshots**: `Project=bakehouse`, `Channel=candidate`, `GitSha`, `BaseAmi`, `BuildDate`;
+- `run_tags` and `run_volume_tags` with at least `Project=bakehouse`. Packer tags the builder instance, its volumes and the new AMI *at creation* from `run_tags`, and applies your `tags` only afterwards. You need this for the tag-scoped IAM in TP3.3.
 
 ```bash
 cd image
@@ -61,7 +62,9 @@ Implement `install.sh`, `harden.sh`, `verify.sh` following their header comments
 Things worth discovering by doing:
 - The final hardening step disables sshd, but Packer is *still using SSH* to run the next provisioner. Hence `disable` + `mask` and **not** `--now`. A service that is masked but running keeps its current sessions until the instance shuts down.
 - `verify.sh` is the quality gate. Every claim your image makes ("sshd is masked", "auditd enabled", "no pending security updates") is an assertion that fails the build. A failed provisioner means **no AMI is created**.
-- AL2023 package for the ECR credential helper is `amazon-ecr-credential-helper`. If your region's repo doesn't carry it, fall back to the release binary from the GitHub project and **verify its checksum**.
+- AL2023 packages the ECR credential helper as `amazon-ecr-credential-helper` (verified in the repo). The SSM agent also ships as a package: install and enable it explicitly, since it's your only door once sshd is masked.
+- **AL2023 repos are versioned**: `dnf` stays on the release the AMI shipped with, so `dnf upgrade --security` can be a silent no-op. Use `--releasever=latest` for both the upgrade and the check. `dnf -q check-update --security --releasever=latest` exits **100 when updates are pending**: assert on the exit code in `verify.sh`, not on text.
+- Don't assert `net.ipv4.ip_forward` in `verify.sh`: Docker hasn't started during the build, so it is 0.
 
 <details><summary>Hint: docker + credential helper config</summary>
 
@@ -75,11 +78,11 @@ Put settings in `/etc/sysctl.d/90-bakehouse.conf` and apply with `sysctl --syste
 ### TP3.3: `image.yml`
 Assume `ROLE_IMAGE_FACTORY`, set up Packer, `packer init`, `packer validate`, `packer build -var git_sha=${{ github.sha }}`. Triggers already present: push to `image/**`, manual, monthly schedule.
 
-Expect IAM iteration here: Packer needs a specific set of EC2 permissions, and each missing one shows up as a different `UnauthorizedOperation`. Read the denied action in the error, update `bootstrap/` (it's applied from your laptop, remember), repeat. Then tighten: anything with a wildcard resource that could be scoped by tag (`ec2:CreateTags`, deregistration) should be.
+Expect IAM iteration here: each missing permission shows up as a different `UnauthorizedOperation`. Read the denied action in the error, update `bootstrap/` (applied from your laptop, remember), repeat. **This can eat an hour: if you're 20 minutes in, ask for the validated policy** (catch-up rule in the README). Then tighten: scope by tag what you can (`ec2:CreateTags`, `TerminateInstances`, deregistration). Because Packer applies `tags` *after* creation but `run_tags` *at* creation, a rule like "CreateTags only on resources tagged `Project=bakehouse`" needs `run_tags` (TP3.1) and, for the creating calls, an `ec2:CreateAction` condition.
 
 <details><summary>Hint: the packer action</summary>
 
-`hashicorp/setup-packer@main` (pin a version in practice). The runner is arm64 but the builder instance is a separate EC2 machine, so the runner's architecture doesn't matter for the AMI.
+`hashicorp/setup-packer@v3` with an explicit Packer `version:`. Add `packer validate -evaluate-datasources` after the OIDC step: plain `validate` does not evaluate data sources, so a typo in the SSM parameter name would otherwise only fail at `build`. The runner is arm64 but the builder instance is a separate EC2 machine, so the runner's architecture doesn't matter for the AMI.
 </details>
 
 ### TP3.4: `promote-image.yml`

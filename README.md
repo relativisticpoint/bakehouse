@@ -27,13 +27,19 @@ Rolling out a new OS or app version is a one-line PR. Rolling back is `git rever
 | Time | TP | You build | Core lesson |
 |---|---|---|---|
 | Evening before | [Prep](docs/00-prep.md) | Tools, AWS profile, public repo | Saves ~1h on the day |
-| 09:00–09:30 | [TP0 Bootstrap](docs/TP0-bootstrap.md) | S3 state + locking, GitHub OIDC roles | The bootstrap problem; why CI holds no keys |
-| 09:30–11:00 | [TP1 Terraform pipeline](docs/TP1-terraform-pipeline.md) | Modules, environments, plan/apply workflow | Infra changes go through code review |
-| 11:00–12:30 | [TP2 Artifacts & supply chain](docs/TP2-artifacts.md) | ECR, SBOM, scan gate, signing, promotion | Build once, deploy many; digests not tags |
-| 12:30–13:30 | Lunch | *Start the first Packer bake before you eat* | |
-| 13:30–15:30 | [TP3 OS factory](docs/TP3-os-factory.md) | Packer AMI, hardening, channels | Immutable infrastructure |
-| 15:30–17:00 | [TP4 Deploy](docs/TP4-deploy.md) | ASG + ALB, instance refresh, dev→prod | Pinning, approvals, rolling updates |
-| 17:00–18:00 | [TP5 Break it](docs/TP5-break-it.md) | Failure drills and teardown | Production grade means failure paths work |
+| 08:30–09:30 | [TP0 Bootstrap](docs/TP0-bootstrap.md) | S3 state + locking, GitHub OIDC roles | The bootstrap problem; why CI holds no keys |
+| 09:30–11:15 | [TP1 Terraform pipeline](docs/TP1-terraform-pipeline.md) | Modules, environments, plan/apply workflow | Infra changes go through code review |
+| 11:15–13:00 | [TP2 Artifacts & supply chain](docs/TP2-artifacts.md) | ECR, SBOM, scan gate, signing, promotion | Build once, deploy many; digests not tags |
+| 13:00–13:45 | Lunch | *Start the first Packer bake before you eat* | |
+| 13:45–16:00 | [TP3 OS factory](docs/TP3-os-factory.md) | Packer AMI, hardening, channels | Immutable infrastructure |
+| 16:00–18:00 | [TP4 Deploy](docs/TP4-deploy.md) | ASG + ALB, instance refresh, dev→prod | Pinning, approvals, rolling updates |
+| 18:00–19:00 | [TP5 Break it](docs/TP5-break-it.md) | Failure drills and teardown | Production grade means failure paths work |
+
+## Time reality check
+
+The reference solution was built end to end and validated offline. Writing it unaided takes longer than a naive 9 hours: the code you write is ~2,500 lines (HCL, YAML, shell), and some waits can't be shortened (Packer bakes ~10 min each, ALB/ASG creation ~5 min per environment, every PR cycle ~5 min). Plan for **~10.5 hours of work** with the catch-up rule below; unaided, 12 hours or **two half-days** (TP0–TP2, then TP3–TP5) are more comfortable. The TPs are chained, but each ends at a clean checkpoint, so splitting between TP2 and TP3 is natural.
+
+**Catch-up rule.** If you've been stuck on one exercise for 15+ minutes, or a TP is more than 20 minutes over its time box, ask your teacher (Claude) to review your code and give a hint, or to apply the validated reference for *that exercise only*. A working platform at 19:00 beats a perfect TP1 and no TP4. When you're running late, cut in this order: TP5 drill 3, TP4.4's second half, TP3's IAM iteration (ask for the policy), TP1's bonus plan-artifact flow.
 
 ## How to work through it
 

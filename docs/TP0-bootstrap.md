@@ -1,4 +1,4 @@
-# TP0: Bootstrap (09:00–09:30)
+# TP0: Bootstrap (08:30–09:30)
 
 ## Objectives
 By the end you can explain, and have built:
@@ -29,6 +29,8 @@ The `sub` claim looks different depending on how the job was triggered:
 | push / dispatch on main | `repo:OWNER/bakehouse:ref:refs/heads/main` |
 | pull request | `repo:OWNER/bakehouse:pull_request` |
 | job using an `environment` | `repo:OWNER/bakehouse:environment:<name>` |
+
+A job that declares an `environment:` presents **only** the environment form of `sub`, never the branch form. `workflow_dispatch` and `schedule` jobs present the branch form. The `sub` comparison is case-sensitive: use your login exactly as `gh api user -q .login` prints it.
 
 **Why four roles?** One role per job family, so a compromise or a bug has a small blast radius:
 
@@ -76,10 +78,10 @@ Create:
 1. `aws_iam_openid_connect_provider` for `https://token.actions.githubusercontent.com`, audience `sts.amazonaws.com`.
 2. The four roles from the table above. Each **trust policy** must have: principal = the OIDC provider, action `sts:AssumeRoleWithWebIdentity`, a condition on `…:aud` **and** a condition on `…:sub` restricted to your repo.
 3. Permissions:
-   - `tf-plan`: managed `ReadOnlyAccess` + an inline policy: read the state bucket, and `PutObject`/`DeleteObject` only on `*.tflock` keys.
-   - `tf-apply`: `PowerUserAccess` (can't touch IAM) + an inline policy allowing IAM role / instance-profile / policy management **only** on resources named `bakehouse-dev-*` and `bakehouse-prod-*`, plus full access to the state bucket. Note that it cannot edit `bakehouse-gh-*` roles. That's deliberate: CI must not be able to rewrite its own permissions.
+   - `tf-plan`: managed `ReadOnlyAccess` + an inline policy: read the state bucket, and `GetObject`/`PutObject`/`DeleteObject` only on `*.tflock` keys (it reads the lock to tell you who holds it). Be aware that `ReadOnlyAccess` already reads every bucket: the inline statement documents intent more than it restricts.
+   - `tf-apply`: `PowerUserAccess` (no IAM) + an inline policy allowing IAM role / instance-profile / policy management **only** on resources named `bakehouse-dev-*` and `bakehouse-prod-*`, plus full access to the state bucket. It cannot edit the `bakehouse-gh-*` roles: CI must not be able to rewrite its own permissions. Be honest about the limit, though: it can still write *any* policy document onto `bakehouse-dev-*` roles, so a PR author who can change the module can give an instance role more power. The real fix is a **permissions boundary** on every role the pipeline creates (see Going further).
    - `artifacts`: ECR push and pull on `arn:aws:ecr:eu-west-3:<acct>:repository/bakehouse/*` plus `ecr:GetAuthorizationToken`. (The repos don't exist yet; that's fine, IAM doesn't check.)
-   - `image-factory`: what Packer's `amazon-ebs` builder needs (see the "IAM Task or Instance Role" page of the Packer amazon plugin docs), `ssm:GetParameter` on the AL2023 public parameter, and `ec2:CreateTags`, `DescribeImages`, `EnableImageDeprecation`, `ModifyImageAttribute`. You will refine this in TP3.
+   - `image-factory`: what Packer's `amazon-ebs` builder needs (the "IAM Task or Instance Role" section of the **README of the Packer amazon plugin**; about 33 EC2 actions), plus `ec2:DescribeVpcs` and `ec2:DescribeInstanceTypeOfferings` (default-VPC builds), `ssm:GetParameter` on the AL2023 public parameter, and `EnableImageDeprecation` for promotion. Start broad (all of these on `*`); tightening by tag happens in TP3 and depends on how Packer tags (see TP3). You will iterate on this.
 
 <details><summary>Hint: trust policy shape</summary>
 
@@ -132,4 +134,6 @@ terraform plan -var github_owner=<you>                                 # "No cha
 - Separate AWS accounts per environment (the real production answer) and AWS Organizations SCPs.
 - IAM Identity Center for humans instead of an IAM user.
 - A role per environment for apply (`tf-apply-dev`, `tf-apply-prod`), so a dev job can never touch prod.
+- **Permissions boundaries** (`iam:PermissionsBoundary` condition on `CreateRole`/`PutRolePolicy`) so that even a compromised pipeline cannot mint a role more powerful than the boundary.
+- A bucket lifecycle rule for expired delete markers: every lock release on a versioned bucket leaves one.
 - State bucket replication / MFA-delete for disaster recovery.

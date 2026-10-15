@@ -4,5 +4,6 @@
 #   - the ECR credential helper, and /root/.docker/config.json with {"credsStore": "ecr-login"}
 #   - move /tmp/app.service to /etc/systemd/system/app.service, `systemctl enable app`
 #     (enable it but don't start it: there is no /etc/bakehouse/app.env yet. user-data writes it at boot)
+#   - amazon-ssm-agent: make sure it is installed and enabled (it's your only way in once sshd is masked)
 #   - mkdir -p /etc/bakehouse
 set -euo pipefail

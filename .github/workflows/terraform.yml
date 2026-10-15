@@ -1,8 +1,9 @@
 name: terraform
 
 on:
+  # No `paths:` filter on pull_request on purpose: a required status check that never starts
+  # (because the PR touched only docs/) leaves the PR stuck on "Expected - Waiting for status".
   pull_request:
-    paths: ["modules/**", "envs/**", "artifacts/**", ".github/workflows/terraform.yml"]
   push:
     branches: [main]
     paths: ["modules/**", "envs/**", "artifacts/**", ".github/workflows/terraform.yml"]
@@ -39,6 +40,17 @@ jobs:
       # TODO(TP1.3): matrix over envs/dev and envs/prod. configure-aws-credentials with
       #              vars.ROLE_TF_PLAN, init with -backend-config bucket, `plan -out`, post as PR comment.
       - run: echo "TODO(TP1.3) plan"
+
+  # TODO(TP1.4): branch protection requires THIS job only. It always runs and fails if `checks` or
+  # `plan` failed (a skipped matrix job would otherwise count as "passing"). Hint:
+  #   needs: [checks, plan]   if: always()
+  #   step: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "false"
+  gate:
+    if: github.event_name == 'pull_request'
+    needs: [checks, plan]
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - run: echo "TODO(TP1.4) fail when a needed job failed"
 
   apply-dev:
     if: github.event_name != 'pull_request'

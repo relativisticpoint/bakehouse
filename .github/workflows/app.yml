@@ -2,7 +2,7 @@ name: app
 
 on:
   pull_request:
-    paths: ["app/**", ".github/workflows/app.yml"]
+    paths: ["app/**", ".github/workflows/app.yml"]   # not a required check, so a path filter is fine here
   push:
     branches: [main]
     paths: ["app/**", ".github/workflows/app.yml"]

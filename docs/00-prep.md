@@ -5,7 +5,7 @@ Goal: wake up and start TP0 without installing anything. Finish by running `./sc
 ## 1. Install the tools
 
 ```bash
-brew install hashicorp/tap/terraform hashicorp/tap/packer tflint trivy cosign syft actionlint crane jq
+brew install hashicorp/tap/terraform hashicorp/tap/packer tflint trivy cosign syft actionlint crane jq awscli gh
 brew install --cask session-manager-plugin
 ```
 
@@ -17,6 +17,7 @@ brew install --cask session-manager-plugin
 | cosign, syft, crane | Signing, SBOMs and registry copies (TP2) |
 | actionlint | Catches workflow mistakes before you push |
 | jq | Reading Terraform/AWS JSON output in shell |
+| awscli, gh | AWS and GitHub command lines (`python3` is also needed by `preflight.sh`; macOS ships it) |
 | session-manager-plugin | Shell access to instances without SSH (TP4) |
 
 Docker must be running too (OrbStack or Docker Desktop).
@@ -61,6 +62,8 @@ git add -A && git commit -m "Bakehouse scaffold"     # skip if already committed
 gh repo create bakehouse --public --source=. --remote=origin --push
 ```
 
+> **Never push every branch.** This repo may contain a local-only `solutions` branch with a reference solution. `gh repo create --push` pushes the current branch only, which is what you want. Don't run `git push --all` or `git push --mirror`, or you publish the answers (and a public repo can't take them back).
+
 Harden the repo's Actions settings (this matters because the repo is public):
 
 ```bash
@@ -73,7 +76,7 @@ gh api -X PUT "repos/$OWNER/bakehouse/actions/permissions/fork-pr-contributor-ap
   -f approval_policy=all_external_contributors
 ```
 
-> If either call errors (GitHub changes these endpoints occasionally), set the same options in the UI: *Settings → Actions → General*.
+> If a call errors (e.g. 409 because an organisation policy forbids it), set the same options in the UI: *Settings → Actions → General*.
 
 ## 4. Run the check
 

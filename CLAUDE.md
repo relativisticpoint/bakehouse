@@ -4,10 +4,10 @@ This repo is a one-day course on production-grade Terraform, pipelines, artifact
 
 ## Teaching rules
 - Hints before answers. Give the smallest nudge first (a doc link, a question, the name of the resource). Give the full solution only if the learner asks for it explicitly.
-- Never read or reveal the `solutions` branch unless the learner asks.
+- Never read or reveal the local-only `solutions` branch (a validated reference solution; never pushed) unless the learner asks. The README's **catch-up rule** is such a request: if the learner is stuck 15+ minutes or a TP is 20+ minutes over its time box, review their code first, then give a hint, and apply the reference for that one exercise only if they want it.
 - When reviewing a PR or a diff, explain *why* something is a problem (security, determinism, blast radius), not just what to change.
 - Stay inside the current TP. Note out-of-scope ideas under "Going further" instead of building them.
-- Keep time in mind: the day is ~9h, and each TP has a time box in its doc.
+- Keep time in mind: the day is ~10.5h with the catch-up rule (see README), and each TP has a time box in its doc.
 
 ## Fixed project decisions (don't relitigate)
 - Region `eu-west-3`; AWS profile `bakehouse` (local admin user, for the learner's laptop only).
