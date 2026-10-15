@@ -7,8 +7,9 @@ variable "region" {
 variable "github_owner" {
   description = "GitHub user or org that owns the repository (used in OIDC trust conditions)."
   type        = string
+  default     = "relativisticpoint"
 }
-
+  
 variable "github_repo" {
   description = "GitHub repository name."
   type        = string
