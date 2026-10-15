@@ -8,9 +8,16 @@ terraform {
     }
   }
 
-  # TODO(TP0.2): once the bucket exists, add an s3 backend block here
+  # !(TP0.2): once the bucket exists, add an s3 backend block here
   # (bucket, key = "bootstrap/terraform.tfstate", region, encrypt, use_lockfile = true)
   # then run: terraform init -migrate-state
+  backend "s3" {
+    bucket         = "bakehouse-tfstate-683803165943"
+    key            = "bootstrap/terraform.tfstate"
+    region         = "eu-west-3"
+    encrypt        = true
+    use_lockfile   = true
+  }
 }
 
 provider "aws" {
